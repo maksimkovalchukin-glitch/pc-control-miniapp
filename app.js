@@ -2,27 +2,20 @@ const tg = window.Telegram?.WebApp;
 tg?.ready();
 tg?.expand();
 
-// Сервер — той самий хост де відкрита ця сторінка
 const API_URL = window.location.origin;
 
-function getInitData() {
-  return tg?.initData || "";
-}
+function getInitData() { return tg?.initData || ""; }
 
 async function apiRequest(method, path, body = null) {
   const opts = {
     method,
-    headers: {
-      "Content-Type": "application/json",
-      "X-Init-Data": getInitData(),
-    },
+    headers: { "Content-Type": "application/json", "X-Init-Data": getInitData() },
   };
   if (body) opts.body = JSON.stringify(body);
-
   const res = await fetch(API_URL + path, opts);
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || "Помилка запиту");
+    throw new Error(err.detail || "Помилка");
   }
   return res.json();
 }
@@ -30,7 +23,6 @@ async function apiRequest(method, path, body = null) {
 // ─── Toast ────────────────────────────────────────────────────────────────────
 const toast = document.getElementById("toast");
 let toastTimer;
-
 function showToast(msg) {
   clearTimeout(toastTimer);
   toast.textContent = msg;
@@ -38,65 +30,38 @@ function showToast(msg) {
   toastTimer = setTimeout(() => toast.classList.remove("show"), 2500);
 }
 
-// ─── Вивід ────────────────────────────────────────────────────────────────────
-function showOutput(text, ok = true) {
-  const card = document.getElementById("output-card");
-  const pre = document.getElementById("output-text");
-  pre.textContent = text;
-  pre.style.color = ok ? "var(--text)" : "var(--danger)";
-  card.style.display = "block";
-  card.scrollIntoView({ behavior: "smooth" });
-}
+// ─── Надіслати текст ──────────────────────────────────────────────────────────
+const sendBtn = document.getElementById("send-btn");
+const msgInput = document.getElementById("msg-input");
 
-// ─── Команди ─────────────────────────────────────────────────────────────────
-async function loadCommands() {
+async function sendText() {
+  const text = msgInput.value.trim();
+  if (!text) return;
+  sendBtn.disabled = true;
+  sendBtn.textContent = "Надсилаю...";
   try {
-    const data = await apiRequest("GET", "/commands");
-    renderCommands(data.commands);
-  } catch (e) {
-    document.getElementById("commands-grid").innerHTML =
-      `<p style="color:var(--danger);font-size:13px">❌ ${e.message}</p>`;
-  }
-}
-
-function renderCommands(commands) {
-  const grid = document.getElementById("commands-grid");
-  grid.innerHTML = "";
-  for (const cmd of commands) {
-    const btn = document.createElement("button");
-    btn.className = "cmd-btn";
-    btn.innerHTML = `<span class="icon">${cmd.icon}</span><span class="label">${cmd.label}</span>`;
-    btn.addEventListener("click", () => executeCommand(cmd.key, btn));
-    grid.appendChild(btn);
-  }
-}
-
-async function executeCommand(key, btn) {
-  btn.classList.add("running");
-  btn.disabled = true;
-  try {
-    const data = await apiRequest("POST", "/execute", { command: key });
-    if (data.output && data.output.trim()) {
-      showOutput(data.output, data.ok);
-    } else {
-      showToast(data.ok ? "✅ Виконано" : "❌ Помилка");
-    }
+    await apiRequest("POST", "/send", { text });
+    msgInput.value = "";
+    showToast("✅ Вставлено у вікно");
   } catch (e) {
     showToast("❌ " + e.message);
   } finally {
-    btn.classList.remove("running");
-    btn.disabled = false;
+    sendBtn.disabled = false;
+    sendBtn.textContent = "Надіслати ↵";
   }
 }
 
+sendBtn.addEventListener("click", sendText);
+msgInput.addEventListener("keydown", e => {
+  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) sendText();
+});
+
 // ─── Статус системи ───────────────────────────────────────────────────────────
 async function loadStatus() {
-  const container = document.getElementById("status-container");
-  container.innerHTML = `<span class="status-label">Завантаження...</span>`;
+  const c = document.getElementById("status-container");
   try {
     const data = await apiRequest("GET", "/status");
-    const lines = (data.info || "").split("\n");
-    container.innerHTML = lines.map(line => {
+    c.innerHTML = (data.output || "").split("\n").map(line => {
       const [label, ...rest] = line.split(": ");
       return `<div class="status-row">
         <span class="status-label">${label}</span>
@@ -104,53 +69,47 @@ async function loadStatus() {
       </div>`;
     }).join("");
   } catch {
-    container.innerHTML = `<span class="status-label">ПК офлайн або клієнт не запущено</span>`;
+    c.innerHTML = `<span class="status-label">ПК офлайн або клієнт не запущено</span>`;
   }
 }
+
+document.getElementById("refresh-btn").addEventListener("click", loadStatus);
 
 // ─── Claude Hooks ─────────────────────────────────────────────────────────────
 async function loadPendingHooks() {
   try {
     const data = await apiRequest("GET", "/claude/pending");
     renderHooks(data.pending || []);
-  } catch {
-    // ігноруємо
-  }
+  } catch { /* ігноруємо */ }
 }
 
 function renderHooks(items) {
-  const container = document.getElementById("hooks-container");
+  const c = document.getElementById("hooks-container");
   if (!items.length) {
-    container.innerHTML = '<p class="no-pending">Немає очікуючих дій</p>';
+    c.innerHTML = '<p class="no-pending">Немає очікуючих дій</p>';
     return;
   }
-  container.innerHTML = items.map(item => `
-    <div class="hook-item" data-id="${item.id}">
+  c.innerHTML = items.map(item => `
+    <div class="hook-item">
       <div class="hook-tool">🔧 ${item.tool}</div>
       <div class="hook-desc">${item.description}</div>
       <div class="hook-actions">
-        <button class="btn-approve" onclick="decideHook('${item.id}', true)">✅ Дозволити</button>
-        <button class="btn-deny" onclick="decideHook('${item.id}', false)">❌ Заборонити</button>
+        <button class="btn-approve" onclick="decide('${item.id}',true)">✅ Дозволити</button>
+        <button class="btn-deny" onclick="decide('${item.id}',false)">❌ Заборонити</button>
       </div>
-    </div>
-  `).join("");
+    </div>`).join("");
 }
 
-window.decideHook = async function (hookId, approved) {
+window.decide = async (id, approved) => {
   try {
-    await apiRequest("POST", `/claude/decide/${hookId}`, { approved });
+    await apiRequest("POST", `/claude/decide/${id}`, { approved });
     showToast(approved ? "✅ Дозволено" : "❌ Заборонено");
     loadPendingHooks();
-  } catch (e) {
-    showToast("❌ " + e.message);
-  }
+  } catch (e) { showToast("❌ " + e.message); }
 };
 
-// ─── Ініціалізація ────────────────────────────────────────────────────────────
-async function init() {
-  await Promise.all([loadCommands(), loadStatus(), loadPendingHooks()]);
-  setInterval(loadPendingHooks, 5000);
-  setInterval(loadStatus, 30000);
-}
-
-init();
+// ─── Init ─────────────────────────────────────────────────────────────────────
+loadStatus();
+loadPendingHooks();
+setInterval(loadPendingHooks, 4000);
+setInterval(loadStatus, 60000);

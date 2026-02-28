@@ -9,53 +9,39 @@ import subprocess
 import sys
 import time
 import urllib.request
-import urllib.error
 from pathlib import Path
 
-# Фікс для Windows терміналу (cp1251 не підтримує емоджі)
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
-# Завантажити .env якщо є
+# Завантажити .env
 env_file = Path(__file__).parent.parent.parent / ".env"
 if env_file.exists():
-    for line in env_file.read_text().splitlines():
+    for line in env_file.read_text(encoding="utf-8").splitlines():
         if "=" in line and not line.startswith("#"):
             k, v = line.split("=", 1)
             os.environ.setdefault(k.strip(), v.strip())
 
 SERVER_URL = os.getenv("SERVER_URL", "").rstrip("/")
 POLL_SECRET = os.getenv("POLL_SECRET", "change-me-poll-secret")
-POLL_INTERVAL = 2  # секунди між запитами
+POLL_INTERVAL = 2
 
 if not SERVER_URL:
-    print("❌ SERVER_URL не задано в .env")
+    print("SERVER_URL не задано в .env")
     sys.exit(1)
 
-VSCODE = r"C:\Users\maksi\AppData\Local\Programs\Microsoft VS Code\Code.exe"
 
-COMMANDS = {
-    "open_vscode": {
-        "cmd": [VSCODE, "c:\\claude project"],
-        "capture": False,
-    },
-    "open_terminal": {
-        "cmd": ["cmd.exe", "/c", "start", "cmd.exe"],
-        "capture": False,
-        "shell": True,
-    },
-    "git_status": {
-        "cmd": ["git", "-C", "c:\\claude project", "status"],
-        "capture": True,
-    },
-    "system_info": {
-        "builtin": "system_info",
-    },
-    "restart_tg_service": {
-        "cmd": [sys.executable, "c:\\claude project\\rayton_tg_service\\main.py"],
-        "capture": False,
-    },
-}
+def type_text(text: str) -> dict:
+    """Вставити текст в активне вікно через буфер обміну."""
+    try:
+        import pyperclip
+        import pyautogui
+        pyperclip.copy(text)
+        time.sleep(0.2)
+        pyautogui.hotkey("ctrl", "v")
+        return {"ok": True, "output": f"Вставлено: {text[:60]}"}
+    except Exception as e:
+        return {"ok": False, "output": str(e)}
 
 
 def get_system_info() -> str:
@@ -70,33 +56,19 @@ def get_system_info() -> str:
             f"Диск C: {disk.used // 1024 ** 3} GB / {disk.total // 1024 ** 3} GB ({disk.percent}%)"
         )
     except ImportError:
-        return "psutil не встановлено. Запусти: pip install psutil"
+        return "psutil не встановлено"
 
 
-def run_command(key: str) -> dict:
-    if key not in COMMANDS:
-        return {"ok": False, "output": f"Невідома команда: {key}"}
+def run_command(cmd: dict) -> dict:
+    key = cmd.get("key", "")
 
-    defn = COMMANDS[key]
-
-    if defn.get("builtin") == "system_info":
+    if key == "system_info":
         return {"ok": True, "output": get_system_info()}
 
-    capture = defn.get("capture", False)
-    try:
-        proc = subprocess.Popen(
-            defn["cmd"],
-            stdout=subprocess.PIPE if capture else subprocess.DEVNULL,
-            stderr=subprocess.PIPE if capture else subprocess.DEVNULL,
-            shell=defn.get("shell", False),
-            text=True,
-        )
-        if capture:
-            stdout, stderr = proc.communicate(timeout=10)
-            return {"ok": proc.returncode == 0, "output": (stdout or stderr or "").strip()[:1000]}
-        return {"ok": True, "output": f"✅ Запущено"}
-    except Exception as e:
-        return {"ok": False, "output": str(e)}
+    if key == "type_text":
+        return type_text(cmd.get("text", ""))
+
+    return {"ok": False, "output": f"Невідома команда: {key}"}
 
 
 def api_get(path: str) -> dict:
@@ -121,31 +93,22 @@ def api_post(path: str, data: dict) -> dict:
 
 
 def main():
-    print(f"🟢 PC Control клієнт запущено")
-    print(f"   Сервер: {SERVER_URL}")
-    print(f"   Поллінг кожні {POLL_INTERVAL} сек\n")
+    print(f"PC Control client started")
+    print(f"Server: {SERVER_URL}")
 
     fail_count = 0
-
     while True:
         try:
             data = api_get("/api/poll")
-            commands = data.get("commands", [])
+            for cmd in data.get("commands", []):
+                print(f">> {cmd.get('key')}: {cmd.get('text', '')[:50]}")
+                result = run_command(cmd)
+                api_post(f"/api/result/{cmd['id']}", result)
             fail_count = 0
-
-            for cmd in commands:
-                cmd_id = cmd["id"]
-                key = cmd["key"]
-                print(f"▶ Виконую: {key}")
-                result = run_command(key)
-                api_post(f"/api/result/{cmd_id}", result)
-                status = "✅" if result["ok"] else "❌"
-                print(f"  {status} {result['output'][:80]}")
-
         except Exception as e:
             fail_count += 1
             if fail_count % 10 == 1:
-                print(f"⚠ Сервер недоступний: {e}")
+                print(f"Server unavailable: {e}")
 
         time.sleep(POLL_INTERVAL)
 

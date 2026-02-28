@@ -158,3 +158,42 @@ header .dot {
 #toast.show { opacity: 1; }
 
 .no-pending { color: var(--text-dim); font-size: 13px; text-align: center; padding: 10px 0; }
+
+textarea {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  color: var(--text);
+  font-size: 14px;
+  resize: none;
+  font-family: inherit;
+  margin-bottom: 10px;
+}
+textarea:focus { outline: none; border-color: var(--accent); }
+
+.btn-send {
+  width: 100%;
+  padding: 13px;
+  background: var(--accent);
+  color: #000;
+  border: none;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.btn-send:disabled { opacity: 0.5; }
+
+.btn-refresh {
+  margin-top: 10px;
+  width: 100%;
+  padding: 9px;
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 12px;
+  cursor: pointer;
+}

@@ -162,68 +162,33 @@ async def telegram_webhook(request: Request):
 
 
 # ─── API для Mini App (авторизація через initData) ───────────────────────────
-AVAILABLE_COMMANDS = [
-    {"key": "open_vscode",      "label": "Відкрити VS Code",    "icon": "💻"},
-    {"key": "open_terminal",    "label": "Відкрити термінал",   "icon": "🖥️"},
-    {"key": "git_status",       "label": "Git статус",          "icon": "📋"},
-    {"key": "system_info",      "label": "Статус системи",      "icon": "📊"},
-    {"key": "restart_tg_service","label": "Перезапуск TG сервіс","icon": "🔄"},
-]
-
-
-@app.get("/commands")
-async def list_commands(request: Request):
-    auth_user(request)
-    return {"commands": AVAILABLE_COMMANDS}
-
-
-@app.post("/execute")
-async def execute_command(request: Request):
-    auth_user(request)
-    body = await request.json()
-    key = body.get("command", "")
-
-    if key not in {c["key"] for c in AVAILABLE_COMMANDS}:
-        raise HTTPException(status_code=400, detail="Невідома команда")
-
+async def enqueue_and_wait(key: str, extra: dict = {}, timeout: int = 15) -> dict:
     cmd_id = str(uuid.uuid4())
-    _cmd_queue[cmd_id] = {
-        "type": "command",
-        "key": key,
-        "status": "pending",
-        "result": None,
-        "ts": time.time(),
-    }
-
-    # Чекаємо результату до 15 сек
-    deadline = time.time() + 15
+    _cmd_queue[cmd_id] = {"key": key, **extra, "status": "pending", "result": None, "ts": time.time()}
+    deadline = time.time() + timeout
     while time.time() < deadline:
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(0.3)
         cmd = _cmd_queue.get(cmd_id, {})
         if cmd.get("status") == "done":
             return {"ok": cmd.get("ok", False), "output": cmd.get("result", "")}
+    return {"ok": False, "output": "Таймаут — клієнт на ПК не відповідає"}
 
-    return {"ok": False, "output": "⏱ Таймаут — ПК не відповідає. Клієнт запущено?"}
+
+@app.post("/send")
+async def send_text(request: Request):
+    """Надіслати текст у активне вікно на ПК."""
+    auth_user(request)
+    body = await request.json()
+    text = body.get("text", "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Порожній текст")
+    return await enqueue_and_wait("type_text", {"text": text})
 
 
 @app.get("/status")
 async def system_status(request: Request):
     auth_user(request)
-    cmd_id = str(uuid.uuid4())
-    _cmd_queue[cmd_id] = {
-        "type": "command",
-        "key": "system_info",
-        "status": "pending",
-        "result": None,
-        "ts": time.time(),
-    }
-    deadline = time.time() + 10
-    while time.time() < deadline:
-        await asyncio.sleep(0.5)
-        cmd = _cmd_queue.get(cmd_id, {})
-        if cmd.get("status") == "done":
-            return {"ok": True, "info": cmd.get("result", "")}
-    return {"ok": False, "info": "ПК не відповідає"}
+    return await enqueue_and_wait("system_info", timeout=10)
 
 
 @app.get("/claude/pending")

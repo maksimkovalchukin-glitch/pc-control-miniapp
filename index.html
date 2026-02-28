@@ -14,24 +14,18 @@
   <h1>PC Control</h1>
 </header>
 
-<!-- Команди -->
-<p class="section-title">Команди</p>
-<div id="commands-grid" class="commands-grid">
-  <div class="cmd-btn"><span class="icon">⏳</span><span class="label">Завантаження...</span></div>
+<!-- Відправити текст в Claude -->
+<p class="section-title">Написати в Claude Code</p>
+<div class="card">
+  <textarea id="msg-input" placeholder="Введи команду для Claude..." rows="3"></textarea>
+  <button id="send-btn" class="btn-send">Надіслати ↵</button>
 </div>
 
-<!-- Вивід команди -->
-<div id="output-card" class="card">
-  <p class="section-title">Вивід</p>
-  <pre id="output-text"></pre>
-</div>
-
-<!-- Статус системи -->
+<!-- Статус ПК -->
 <p class="section-title">Статус системи</p>
 <div class="card">
-  <div id="status-container">
-    <span class="status-label">Завантаження...</span>
-  </div>
+  <div id="status-container"><span class="status-label">Завантаження...</span></div>
+  <button id="refresh-btn" class="btn-refresh">Оновити</button>
 </div>
 
 <!-- Claude hooks -->
@@ -41,7 +35,6 @@
 </div>
 
 <div id="toast"></div>
-
 <script src="app.js"></script>
 </body>
 </html>
