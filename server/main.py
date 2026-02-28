@@ -164,7 +164,7 @@ async def telegram_webhook(request: Request):
 # ─── API для Mini App (авторизація через initData) ───────────────────────────
 async def enqueue_and_wait(key: str, extra: dict = {}, timeout: int = 15) -> dict:
     cmd_id = str(uuid.uuid4())
-    _cmd_queue[cmd_id] = {"key": key, **extra, "status": "pending", "result": None, "ts": time.time()}
+    _cmd_queue[cmd_id] = {"key": key, **extra, "status": "pending", "result": None, "ts": time.time(), "type": "command"}
     deadline = time.time() + timeout
     while time.time() < deadline:
         await asyncio.sleep(0.3)
@@ -217,9 +217,9 @@ async def poll_commands(request: Request):
     """Локальний клієнт тут отримує команди для виконання."""
     auth_client(request)
     pending = [
-        {"id": k, "key": v["key"]}
+        {k2: v2 for k2, v2 in v.items() if k2 not in ("status", "result", "ts")} | {"id": k}
         for k, v in _cmd_queue.items()
-        if v["status"] == "pending" and v["type"] == "command"
+        if v["status"] == "pending"
     ]
     return {"commands": pending}
 
