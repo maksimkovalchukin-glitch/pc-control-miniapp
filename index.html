@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PC Control</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<header>
+  <div class="dot"></div>
+  <h1>PC Control</h1>
+  <button id="config-btn" style="margin-left:auto;background:none;border:none;color:var(--text-dim);font-size:18px;cursor:pointer;">⚙️</button>
+</header>
+
+<!-- Конфіг панель (показується якщо немає API URL) -->
+<div id="config-panel" class="card">
+  <p class="section-title">Налаштування</p>
+  <div class="input-row">
+    <label>API URL (адреса локального сервера через тунель)</label>
+    <input id="api-url-input" type="url" placeholder="https://xxxx.trycloudflare.com" />
+  </div>
+  <button id="save-config-btn" class="btn-save">Зберегти</button>
+</div>
+
+<!-- Команди -->
+<p class="section-title">Команди</p>
+<div id="commands-grid" class="commands-grid">
+  <!-- Заповнюється з /commands -->
+  <div class="cmd-btn"><span class="icon">⏳</span><span class="label">Завантаження...</span></div>
+</div>
+
+<!-- Вивід команди -->
+<div id="output-card" class="card">
+  <p class="section-title">Вивід</p>
+  <pre id="output-text"></pre>
+</div>
+
+<!-- Статус системи -->
+<p class="section-title">Статус системи</p>
+<div class="card">
+  <div id="status-container">
+    <span class="status-label">Завантаження...</span>
+  </div>
+</div>
+
+<!-- Claude hooks -->
+<p class="section-title">Дії Claude (очікують дозволу)</p>
+<div id="hooks-container">
+  <p class="no-pending">Немає очікуючих дій</p>
+</div>
+
+<div id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
