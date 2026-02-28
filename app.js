@@ -2,23 +2,14 @@ const tg = window.Telegram?.WebApp;
 tg?.ready();
 tg?.expand();
 
-// ─── Конфігурація ─────────────────────────────────────────────────────────────
-const STORAGE_KEY = "pc_control_api_url";
-
-function getApiUrl() {
-  return localStorage.getItem(STORAGE_KEY) || "";
-}
+// Сервер — той самий хост де відкрита ця сторінка
+const API_URL = window.location.origin;
 
 function getInitData() {
   return tg?.initData || "";
 }
 
 async function apiRequest(method, path, body = null) {
-  const url = getApiUrl();
-  if (!url) {
-    showConfigPanel();
-    throw new Error("API URL не налаштовано");
-  }
   const opts = {
     method,
     headers: {
@@ -27,7 +18,8 @@ async function apiRequest(method, path, body = null) {
     },
   };
   if (body) opts.body = JSON.stringify(body);
-  const res = await fetch(url + path, opts);
+
+  const res = await fetch(API_URL + path, opts);
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail || "Помилка запиту");
@@ -62,7 +54,8 @@ async function loadCommands() {
     const data = await apiRequest("GET", "/commands");
     renderCommands(data.commands);
   } catch (e) {
-    // мовчки — якщо немає API URL
+    document.getElementById("commands-grid").innerHTML =
+      `<p style="color:var(--danger);font-size:13px">❌ ${e.message}</p>`;
   }
 }
 
@@ -99,29 +92,27 @@ async function executeCommand(key, btn) {
 // ─── Статус системи ───────────────────────────────────────────────────────────
 async function loadStatus() {
   const container = document.getElementById("status-container");
+  container.innerHTML = `<span class="status-label">Завантаження...</span>`;
   try {
     const data = await apiRequest("GET", "/status");
-    const lines = data.info.split("\n");
+    const lines = (data.info || "").split("\n");
     container.innerHTML = lines.map(line => {
-      const [label, value] = line.split(": ");
+      const [label, ...rest] = line.split(": ");
       return `<div class="status-row">
         <span class="status-label">${label}</span>
-        <span class="status-value">${value ?? ""}</span>
+        <span class="status-value">${rest.join(": ")}</span>
       </div>`;
     }).join("");
-  } catch (e) {
-    container.innerHTML = `<span class="status-label">Немає з'єднання</span>`;
+  } catch {
+    container.innerHTML = `<span class="status-label">ПК офлайн або клієнт не запущено</span>`;
   }
 }
 
 // ─── Claude Hooks ─────────────────────────────────────────────────────────────
-let hooksInterval;
-
 async function loadPendingHooks() {
-  const container = document.getElementById("hooks-container");
   try {
     const data = await apiRequest("GET", "/claude/pending");
-    renderHooks(data.pending);
+    renderHooks(data.pending || []);
   } catch {
     // ігноруємо
   }
@@ -155,32 +146,11 @@ window.decideHook = async function (hookId, approved) {
   }
 };
 
-// ─── Конфіг панель ───────────────────────────────────────────────────────────
-function showConfigPanel() {
-  document.getElementById("config-panel").style.display = "block";
-  document.getElementById("api-url-input").value = getApiUrl();
-}
-
-document.getElementById("save-config-btn").addEventListener("click", () => {
-  const url = document.getElementById("api-url-input").value.trim().replace(/\/$/, "");
-  localStorage.setItem(STORAGE_KEY, url);
-  document.getElementById("config-panel").style.display = "none";
-  showToast("✅ Збережено");
-  init();
-});
-
-document.getElementById("config-btn").addEventListener("click", showConfigPanel);
-
 // ─── Ініціалізація ────────────────────────────────────────────────────────────
 async function init() {
-  if (!getApiUrl()) {
-    showConfigPanel();
-    return;
-  }
   await Promise.all([loadCommands(), loadStatus(), loadPendingHooks()]);
-
-  clearInterval(hooksInterval);
-  hooksInterval = setInterval(loadPendingHooks, 5000);
+  setInterval(loadPendingHooks, 5000);
+  setInterval(loadStatus, 30000);
 }
 
 init();
