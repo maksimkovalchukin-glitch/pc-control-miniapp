@@ -2,6 +2,7 @@
 Локальний клієнт — запускається на ПК.
 Поллінгує хмарний сервер і виконує команди локально.
 """
+import io
 import json
 import os
 import subprocess
@@ -10,6 +11,10 @@ import time
 import urllib.request
 import urllib.error
 from pathlib import Path
+
+# Фікс для Windows терміналу (cp1251 не підтримує емоджі)
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
 # Завантажити .env якщо є
 env_file = Path(__file__).parent.parent.parent / ".env"
@@ -27,24 +32,27 @@ if not SERVER_URL:
     print("❌ SERVER_URL не задано в .env")
     sys.exit(1)
 
+VSCODE = r"C:\Users\maksi\AppData\Local\Programs\Microsoft VS Code\Code.exe"
+
 COMMANDS = {
     "open_vscode": {
-        "cmd": ["code", "c:/claude project"],
+        "cmd": [VSCODE, "c:\\claude project"],
         "capture": False,
     },
     "open_terminal": {
-        "cmd": ["wt.exe"],
+        "cmd": ["cmd.exe", "/c", "start", "cmd.exe"],
         "capture": False,
+        "shell": True,
     },
     "git_status": {
-        "cmd": ["git", "-C", "c:/claude project", "status"],
+        "cmd": ["git", "-C", "c:\\claude project", "status"],
         "capture": True,
     },
     "system_info": {
         "builtin": "system_info",
     },
     "restart_tg_service": {
-        "cmd": [sys.executable, "c:/claude project/rayton_tg_service/main.py"],
+        "cmd": [sys.executable, "c:\\claude project\\rayton_tg_service\\main.py"],
         "capture": False,
     },
 }
@@ -80,6 +88,7 @@ def run_command(key: str) -> dict:
             defn["cmd"],
             stdout=subprocess.PIPE if capture else subprocess.DEVNULL,
             stderr=subprocess.PIPE if capture else subprocess.DEVNULL,
+            shell=defn.get("shell", False),
             text=True,
         )
         if capture:
