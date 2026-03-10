@@ -19,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 load_dotenv()
 
 BOT_TOKEN = os.getenv("TG_BOT_TOKEN", "")
-ALLOWED_USER_ID = int(os.getenv("ALLOWED_USER_ID", "5303354466"))
+ALLOWED_USERNAME = os.getenv("ALLOWED_USERNAME", "kovalchukym")
 POLL_SECRET = os.getenv("POLL_SECRET", "change-me-poll-secret")
 PORT = int(os.getenv("PORT", "8000"))
 TG_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
@@ -40,6 +40,9 @@ _cmd_queue: dict[str, dict] = {}
 # Черга очікуючих Claude hook дозволів
 # {hook_id: {tool, description, ts, approved: None|bool}}
 _hook_queue: dict[str, dict] = {}
+
+# Chat ID зберігається після першого /start від дозволеного юзера
+_allowed_chat_id: Optional[int] = None
 
 
 # ─── Статика (Mini App) ───────────────────────────────────────────────────────
@@ -77,7 +80,7 @@ def validate_init_data(init_data: str) -> dict:
         raise ValueError("initData застаріло")
 
     user = json.loads(parsed.get("user", "{}"))
-    if user.get("id") != ALLOWED_USER_ID:
+    if user.get("username") != ALLOWED_USERNAME:
         raise ValueError("Доступ заборонено")
     return user
 
@@ -113,8 +116,7 @@ async def telegram_webhook(request: Request):
 
     # Callback (кнопки Claude hook або inline)
     if cb := update.get("callback_query"):
-        user_id = cb["from"]["id"]
-        if user_id != ALLOWED_USER_ID:
+        if cb["from"].get("username") != ALLOWED_USERNAME:
             return {"ok": True}
 
         data = cb.get("data", "")
@@ -135,11 +137,13 @@ async def telegram_webhook(request: Request):
 
     msg = update.get("message", {})
     chat_id = msg.get("chat", {}).get("id")
-    user_id = msg.get("from", {}).get("id")
     text = msg.get("text", "")
 
-    if not chat_id or user_id != ALLOWED_USER_ID:
+    if not chat_id or msg.get("from", {}).get("username") != ALLOWED_USERNAME:
         return {"ok": True}
+
+    global _allowed_chat_id
+    _allowed_chat_id = chat_id
 
     if text == "/start":
         server_url = os.getenv("SERVER_URL", "")
@@ -252,14 +256,15 @@ async def claude_hook_from_client(request: Request):
         "ts": time.time(),
     }
 
-    await send_tg(ALLOWED_USER_ID, (
-        f"🤖 <b>Claude хоче виконати дію</b>\n\n"
-        f"<b>Інструмент:</b> <code>{tool}</code>\n"
-        f"<b>Деталі:</b> {description[:400]}"
-    ), reply_markup={"inline_keyboard": [[
-        {"text": "✅ Дозволити", "callback_data": f"claude_approve_{hook_id}"},
-        {"text": "❌ Заборонити", "callback_data": f"claude_deny_{hook_id}"},
-    ]]})
+    if _allowed_chat_id:
+        await send_tg(_allowed_chat_id, (
+            f"🤖 <b>Claude хоче виконати дію</b>\n\n"
+            f"<b>Інструмент:</b> <code>{tool}</code>\n"
+            f"<b>Деталі:</b> {description[:400]}"
+        ), reply_markup={"inline_keyboard": [[
+            {"text": "✅ Дозволити", "callback_data": f"claude_approve_{hook_id}"},
+            {"text": "❌ Заборонити", "callback_data": f"claude_deny_{hook_id}"},
+        ]]})
 
     return {"ok": True, "hook_id": hook_id}
 
